@@ -1,0 +1,13 @@
+---
+title: "p8105_hw6_lt2949"
+author: "Li Tian"
+date: "2023-11-29"
+output: github_document
+---
+
+## Problem1
+
+```{r}
+
+```
+
