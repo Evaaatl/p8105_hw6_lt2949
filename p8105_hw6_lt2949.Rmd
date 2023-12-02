@@ -4,10 +4,114 @@ author: "Li Tian"
 date: "2023-11-29"
 output: github_document
 ---
-
-## Problem1
-
 ```{r}
+library(tidyverse)
+library(patchwork)
+library(modelr)
+library(mgcv)
 
 ```
 
+
+## Problem1
+
+## Problem2
+
+```{r}
+#Download the data
+weather_df <- 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31") |> 
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |> 
+  select(name, id, everything())
+
+```
+
+After loading the data, we clean it up 
+
+```{r df_clean}
+
+# selects relevant columns and renames Central Park to cp_ny for simplicity
+strapped_weather_df <- weather_df %>% 
+  select(name, tmax, tmin) %>% 
+  mutate(
+    name = str_replace(name, "CentralPark_NY", "cp_ny")
+  ) %>% 
+  bootstrap(n = 5000) %>%                                 
+  mutate(
+    model = map(strap, ~lm(tmax ~ tmin, data = .x)),     
+    result = map(model, broom::tidy),                    
+    stat = map(model, broom::glance)                    
+  )
+
+# a cleaned and filtered df containing variables of interest
+clean_weather_strap <- strapped_weather_df %>% 
+  select(-model, -strap) %>%                              # removed the original strap sample and model
+  rename("strap_run" = .id) %>%                           
+  unnest() %>%                                           
+  select(strap_run, term, estimate, adj.r.squared) %>%   
+  mutate(
+    term = case_when(term == "(Intercept)" ~ "beta0",     # renamed intercept to beta0
+                     term == "tmin" ~ "beta1",            # renamed slope to beta1
+                     TRUE ~ as.character(term))
+  ) %>% 
+  pivot_wider(names_from = term,                         
+              values_from = estimate) %>% 
+  mutate(
+    estimate_log = log(beta0 * beta1)                    
+  ) %>% 
+  janitor::clean_names()
+
+```
+
+After cleaning and bootstrapping, the `clean_weather_strap` dataset with `r nrow(clean_weather_strap)` records includes `adj_r_squared`, `beta0`, `beta1`, and `estimate_log` for each bootstrap iteration (`strap_run`). We will examine their distributions using density plots.
+
+```{r density_plots}
+
+# density plot of r-squared with 2.5% and 97.5% quantile labeled
+r_squared_plot <- clean_weather_strap %>% 
+  ggplot(aes(x = adj_r_squared)) +
+  geom_density(color = "green", fill = "green", alpha = 0.3) +
+  geom_vline(xintercept = c(quantile(pull(clean_weather_strap, adj_r_squared), probs = 0.025),
+                            quantile(pull(clean_weather_strap, adj_r_squared), probs = 0.975)),
+             linetype = "dashed",
+             color = "red") +
+  labs(x = "Adjusted R-squared",
+       y = "Frequency",
+       caption = "Distribution of adjusted R-squared (left) and ln(β̂1 * β̂) (right)")
+
+# density plot of ln(beta0 * beta1) with 2.5% and 97.5% quantile labeled
+estimate_log_plot <- clean_weather_strap %>% 
+  ggplot(aes(x = estimate_log)) +
+  geom_density(color = "lightblue", fill = "lightblue", alpha = 0.3) +
+  geom_vline(xintercept = c(quantile(pull(clean_weather_strap, estimate_log), probs = 0.025),
+                            quantile(pull(clean_weather_strap, estimate_log), probs = 0.975)),
+             linetype = "dashed",
+             color = "red") +
+  labs(x = "ln(β̂1 * β̂0)",
+       y = "Frequency")
+
+# use patchwork to print them side-by-side
+r_squared_plot + estimate_log_plot
+
+```
+
+The plot shows R-squared and log(beta0 * beta1) as nearly normal distributions, with a slight left skew in R-squared. The red dashed lines denote the 2.5% and 97.5% quantiles from the `quantile()` function.
+
+```{r quantiles}
+
+# r-sq 95% CI
+quantile(pull(clean_weather_strap, adj_r_squared), probs = c(0.025, 0.975))
+
+# est_log 95% CI
+quantile(pull(clean_weather_strap, estimate_log), probs = c(0.025, 0.975))
+
+```
+
+As such, we have a 95% CI of [`r quantile(pull(clean_weather_strap, adj_r_squared), probs = 0.025)`, `r quantile(pull(clean_weather_strap, adj_r_squared), probs = 0.975)`] for adjusted R-squared and [`r quantile(pull(clean_weather_strap, estimate_log), probs = 0.025)` , `r quantile(pull(clean_weather_strap, estimate_log), probs  = 0.975)`] for ln(β̂1 * β̂0).
