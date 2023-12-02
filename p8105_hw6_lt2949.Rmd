@@ -134,7 +134,14 @@ birthweight_df
 purrr::map(birthweight_df, ~ sum(is.na(.)))
 
 ```
-This dataset contains `r nrow(birthweight_df)` rows and `r ncol(birthweight_df)` columns, there is no missing data.
+This dataset contains `r nrow(birthweight_df)` rows and `r ncol(birthweight_df)` columns, there is no missing data.\
+
+According to a Wikipedia page[https://en.wikipedia.org/wiki/Low_birth_weight] on low birth weight, certain maternal risk factors like younger age, higher parity, and a history of low birth weight (LBW) infants can influence a baby's birth weight. Based on this information, I incorporated mother's age, number of previous live births, and the count of past LBW infants into the model.
+
+The duration of gestation and the presence of malformations are also intuitively connected to birthweight, hence their inclusion in the model.
+
+Additionally, I wanted to explore the impact of sociodemographic factors on birthweight, leading to the inclusion of the mother's race and family income as variables.
+
 ```{r}
 model_fit_1 = lm(bwt ~ gaweeks + momage + mrace + malform + parity + fincome + pnumlbw, data = birthweight_df)
 
@@ -192,3 +199,6 @@ cv_df %>%
   geom_violin()
 ```
 
+The RMSE plot reveals that out of the three models tested, Model 3 performs the best, evidenced by its lowest RMSE value. Contrary to expectations, Model 1, which was informed by information from Wikipedia, did not align well with the data, suggesting that Wikipedia may not be a reliable source for this purpose.
+
+Model 3 encompasses variables such as head circumference, length, and sex, along with all their interaction terms, including the three-way interaction among them.
